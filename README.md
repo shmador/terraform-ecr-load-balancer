@@ -5,5 +5,5 @@ This project provisions an AWS ECS service using Terraform, registers it with an
 ### Features
 
 - ECS service deployment with load balancing
-- Application Load Balancer configuration
+- CloudWatch configuration for logging
 - Docker image build and push to ECR
