@@ -1,22 +1,15 @@
 provider "aws" {
-  region = "il-central-1"
-}
-
-locals {
-  subnets = [
-    "subnet-01e6348062924d048",
-   "subnet-088b7d937a4cd5d85",
-  ]
+  region = var.region
 }
 
 # Data source to fetch VPC ID from subnets
 data "aws_subnet" "selected_subnets" {
-  id = local.subnets[0]  # Using the first subnet to get the VPC ID
+  id = var.subnets[0]  # Using the first subnet to get the VPC ID
 }
 
 # Create the CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "nginx_logs" {
-  name              = "/ecs/nginx-logs"
+  name              = var.log_group
   retention_in_days = 7  # Optional: Set retention policy (e.g., 7 days)
 }
 
@@ -27,11 +20,11 @@ resource "aws_ecs_task_definition" "nginx_task" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
   memory                   = "512"
-  execution_role_arn       = "arn:aws:iam::314525640319:role/ecsTaskExecutionRole"  # Using the provided role
+  execution_role_arn       = var.execution_role_arn
 
   container_definitions = jsonencode([{
     name      = "nginx"
-    image     = "314525640319.dkr.ecr.il-central-1.amazonaws.com/dor/nginx:latest"
+    image     = var.container_image
     essential = true
     portMappings = [
       {
@@ -43,8 +36,8 @@ resource "aws_ecs_task_definition" "nginx_task" {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        "awslogs-group"         = "/ecs/nginx-logs"
-        "awslogs-region"        = "il-central-1"
+        "awslogs-group"         = var.log_group
+        "awslogs-region"        = var.region
         "awslogs-stream-prefix" = "nginx"
       }
     }
@@ -53,7 +46,7 @@ resource "aws_ecs_task_definition" "nginx_task" {
 
 # Create a new target group of type IP
 resource "aws_lb_target_group" "nginx_target_group" {
-  name     = "dor-target-group"
+  name     = var.tg_name
   port     = 90
   protocol = "HTTP"
   vpc_id   = data.aws_subnet.selected_subnets.vpc_id  # Fetching VPC ID from the first subnet
@@ -63,7 +56,7 @@ resource "aws_lb_target_group" "nginx_target_group" {
 
 # Add a listener on port 90 to the existing Load Balancer 'imtech'
 resource "aws_lb_listener" "nginx_listener" {
-  load_balancer_arn = "arn:aws:elasticloadbalancing:il-central-1:314525640319:loadbalancer/app/imtec/dd67eee2877975d6"  # Correct the ARN here
+  load_balancer_arn = var.load_balancer_arn
   port              = 90
   protocol          = "HTTP"
 
@@ -75,15 +68,15 @@ resource "aws_lb_listener" "nginx_listener" {
 
 # ECS Service using Fargate and connecting to the new target group
 resource "aws_ecs_service" "nginx_service" {
-  name            = "dor-service"
-  cluster         = "imtech"  # Existing ECS cluster
+  name            = var.service_name
+  cluster         = var.cluster_name
   task_definition = aws_ecs_task_definition.nginx_task.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = local.subnets
-    security_groups = ["sg-0ac3749215afde82a"]  # Replace with your security group ID
+    subnets          = var.subnets
+    security_groups  = var.sgs
     assign_public_ip = false
   }
 
